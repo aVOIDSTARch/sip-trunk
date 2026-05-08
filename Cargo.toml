@@ -1,0 +1,17 @@
+[package]
+name = "sip-trunk"
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+
+
+[workspace]
+resolver = "3"
+members = [
+    "sip-trunk-core",
+    "sip-trunk-cli",
+    "sip-trunk-server",
+    "sip-trunk-api",
+    "sip-logger",
+]
