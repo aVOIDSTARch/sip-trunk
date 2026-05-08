@@ -71,7 +71,7 @@ pub struct CallHangupPayload {
     pub hangup_source: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OutboundCallRequest {
     pub connection_id: String,
     pub from: String,
@@ -80,9 +80,113 @@ pub struct OutboundCallRequest {
     pub webhook_url: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TransferRequest {
     pub to: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    #[test]
+    fn test_call_direction_serializes_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&CallDirection::Inbound).unwrap(),
+            "\"inbound\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CallDirection::Outbound).unwrap(),
+            "\"outbound\""
+        );
+    }
+
+    #[test]
+    fn test_call_status_on_hold_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&CallStatus::OnHold).unwrap(),
+            "\"on_hold\""
+        );
+    }
+
+    #[test]
+    fn test_call_roundtrip_json() {
+        let call = Call {
+            id: Uuid::new_v4(),
+            call_control_id: "ctrl_123".to_string(),
+            direction: CallDirection::Inbound,
+            from: "+15551234567".to_string(),
+            to: "+15559876543".to_string(),
+            status: CallStatus::Answered,
+            started_at: Utc::now(),
+            ended_at: None,
+        };
+        let json = serde_json::to_string(&call).unwrap();
+        let back: Call = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.call_control_id, call.call_control_id);
+        assert_eq!(back.direction, CallDirection::Inbound);
+        assert_eq!(back.status, CallStatus::Answered);
+        assert!(back.ended_at.is_none());
+    }
+
+    #[test]
+    fn test_telnyx_webhook_deserializes() {
+        let json = r#"{
+            "data": {
+                "event_type": "call.initiated",
+                "id": "evt_001",
+                "payload": {
+                    "call_control_id": "ctrl_abc",
+                    "call_session_id": "sess_abc",
+                    "call_leg_id": "leg_abc",
+                    "direction": "inbound",
+                    "from": "+15551234567",
+                    "to": "+15559876543"
+                }
+            },
+            "meta": { "attempt": 1, "delivered_to": "https://example.com" }
+        }"#;
+        let webhook: TelnyxWebhook = serde_json::from_str(json).unwrap();
+        assert_eq!(webhook.data.event_type, "call.initiated");
+        assert_eq!(webhook.meta.attempt, 1);
+        let payload: CallInitiatedPayload =
+            serde_json::from_value(webhook.data.payload).unwrap();
+        assert_eq!(payload.call_control_id, "ctrl_abc");
+        assert_eq!(payload.direction, "inbound");
+    }
+
+    #[test]
+    fn test_transfer_request_omits_none_from() {
+        let req = TransferRequest { to: "+1555".to_string(), from: None };
+        let val = serde_json::to_value(&req).unwrap();
+        assert!(val.get("from").is_none(), "None 'from' should be omitted");
+    }
+
+    #[test]
+    fn test_transfer_request_includes_some_from() {
+        let req = TransferRequest {
+            to: "+1555".to_string(),
+            from: Some("+1666".to_string()),
+        };
+        let val = serde_json::to_value(&req).unwrap();
+        assert_eq!(val["from"], "+1666");
+    }
+
+    #[test]
+    fn test_outbound_call_request_roundtrip() {
+        let req = OutboundCallRequest {
+            connection_id: "conn_xyz".to_string(),
+            from: "+15551111111".to_string(),
+            to: "+15552222222".to_string(),
+            webhook_url: Some("https://example.com/hook".to_string()),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        let back: OutboundCallRequest = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.connection_id, "conn_xyz");
+        assert_eq!(back.webhook_url, Some("https://example.com/hook".to_string()));
+    }
 }

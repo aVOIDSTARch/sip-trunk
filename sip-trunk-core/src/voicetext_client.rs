@@ -34,3 +34,24 @@ impl VoiceTextClient {
         Ok(vec![])
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stub_client() -> VoiceTextClient {
+        VoiceTextClient::new("http://localhost:9999".to_string(), "key".to_string())
+    }
+
+    #[tokio::test]
+    async fn test_voice_to_text_returns_empty_placeholder() {
+        let result = stub_client().voice_to_text(b"fake audio bytes").await.unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[tokio::test]
+    async fn test_text_to_voice_returns_empty_placeholder() {
+        let result = stub_client().text_to_voice("hello world").await.unwrap();
+        assert!(result.is_empty());
+    }
+}

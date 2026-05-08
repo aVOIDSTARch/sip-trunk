@@ -118,3 +118,113 @@ impl TelnyxClient {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn mock_client(base_url: &str) -> TelnyxClient {
+        TelnyxClient::new("test_key".to_string(), "conn_123".to_string())
+            .with_base_url(base_url.to_string())
+    }
+
+    #[tokio::test]
+    async fn test_answer_call_success() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/calls/ctrl_abc/actions/answer"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"data": {}})))
+            .mount(&server)
+            .await;
+
+        mock_client(&server.uri()).answer_call("ctrl_abc").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_answer_call_telnyx_api_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/calls/ctrl_bad/actions/answer"))
+            .respond_with(ResponseTemplate::new(422).set_body_string(r#"{"errors":[{"detail":"call not found"}]}"#))
+            .mount(&server)
+            .await;
+
+        let err = mock_client(&server.uri()).answer_call("ctrl_bad").await.unwrap_err();
+        assert!(matches!(err, CoreError::TelnyxApi { status: 422, .. }));
+    }
+
+    #[tokio::test]
+    async fn test_hangup_call_success() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/calls/ctrl_xyz/actions/hangup"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"data": {}})))
+            .mount(&server)
+            .await;
+
+        mock_client(&server.uri()).hangup_call("ctrl_xyz").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_hold_call_success() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/calls/ctrl_xyz/actions/hold"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"data": {}})))
+            .mount(&server)
+            .await;
+
+        mock_client(&server.uri()).hold_call("ctrl_xyz").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_transfer_call_success() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/calls/ctrl_xyz/actions/transfer"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"data": {}})))
+            .mount(&server)
+            .await;
+
+        mock_client(&server.uri())
+            .transfer_call("ctrl_xyz", "+15553333333")
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_initiate_outbound_returns_control_id() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/calls"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": { "call_control_id": "ctrl_outbound_new" }
+            })))
+            .mount(&server)
+            .await;
+
+        let ctrl_id = mock_client(&server.uri())
+            .initiate_outbound_call("+15551111111", "+15552222222", None)
+            .await
+            .unwrap();
+        assert_eq!(ctrl_id, "ctrl_outbound_new");
+    }
+
+    #[tokio::test]
+    async fn test_initiate_outbound_api_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/calls"))
+            .respond_with(ResponseTemplate::new(402).set_body_string("payment required"))
+            .mount(&server)
+            .await;
+
+        let err = mock_client(&server.uri())
+            .initiate_outbound_call("+1555", "+1666", None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, CoreError::TelnyxApi { status: 402, .. }));
+    }
+}

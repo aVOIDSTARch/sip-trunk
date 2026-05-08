@@ -3,4 +3,21 @@ name = "sip-trunk-cli"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "sip_trunk_cli"
+path = "src/lib.rs"
+
 [dependencies]
+sip-logger = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+dotenvy = { workspace = true }
+anyhow = { workspace = true }
+
+[dev-dependencies]
+wiremock = { workspace = true }
+tokio = { workspace = true }
